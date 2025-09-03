@@ -1,0 +1,48 @@
+name: IaC Security with JFrog Artifactory
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  actions: read           # for detecting the Github Actions environment
+  id-token: write         # for creating OIDC tokens for signing
+  packages: write         # for uploading attestations
+  contents: read          # read the contents permission
+  security-events: write  # for uploading code scanning
+
+jobs:
+  build:
+    name: 'Test Terraform Security'
+    env:
+      JFROG_CLI_BUILD_NAME: 'terraform-goof-iac'
+      JFROG_CLI_BUILD_NUMBER: ${{ github.run_number }}
+      JFROG_CLI_LOG_LEVEL: INFO
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup JFrog CLI
+        uses: jfrog/setup-jfrog-cli@v4
+        env:
+          JF_URL: https://${{ vars.JF_URL }}/
+        with:
+          oidc-provider-name: mikeho-github
+          oidc-audience: mikeho-audience
+          version: 2.78.8
+      
+      - name: Audit Source Code
+        run: |
+          jf audit --format=sarif > jfrog_sast.sarif
+        env:
+          JFROG_CLI_LOG_LEVEL: INFO
+      
+      - name: Upload output to generate autofix
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: jfrog_sast.sarif
